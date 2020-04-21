@@ -215,7 +215,7 @@ TEST(RateTest, WarningsAndErrors) {  // NOLINT
   EXPECT_EQ(rate.getNumErrors(), 1u);
 }
 
-TEST(RateTest, StatisticsWithEnforceRate) {  // NOLINT
+TEST(RateTest, DISABLED_StatisticsWithEnforceRate) {  // NOLINT
   const double timeStep = 0.1;
   any_worker::Rate rate("Test", timeStep);
   rate.getOptions().enforceRate_ = true;
