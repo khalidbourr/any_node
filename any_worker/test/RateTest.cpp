@@ -8,12 +8,9 @@
 // any worker
 #include "any_worker/Rate.hpp"
 
-// Local and build server tolerances.
-#define RATE_TEST_TOL_LOCAL 0.001
-#define RATE_TEST_TOL_BUILD_SERVER 0.007
-
-// Use the build server tolerance.
-#define RATE_TEST_TOL RATE_TEST_TOL_BUILD_SERVER
+// time/time
+#define RATE_TEST_TOL 0.05       // 5%
+#define RATE_TEST_TOL_ABS 0.001  // 1ms
 
 /*!
  * Simulate some processing which takes a certain amount of time.
@@ -22,6 +19,8 @@
 void doSomething(const double duration) {
   std::this_thread::sleep_for(std::chrono::nanoseconds(static_cast<int64_t>(1e9 * duration)));
 }
+
+#define EXPECT_NEAR_TEST_TOL(A, B) EXPECT_NEAR((A), (B), (RATE_TEST_TOL) * (B) + RATE_TEST_TOL_ABS)
 
 TEST(RateTest, Initialization) {  // NOLINT
   const std::string name = "Test";
@@ -60,14 +59,14 @@ TEST(RateTest, Reset) {  // NOLINT
   EXPECT_TRUE(std::isnan(rate.getAwakeTimeStdDev()));
 }
 
-TEST(RateTest, SleepWithEnforceRate) {  // NOLINT
-  const double timeStep = 0.1;
+TEST(RateTest, DISABLED_SleepWithEnforceRate) {  // NOLINT
+  const double timeStep = 0.01;
   any_worker::Rate rate("Test", timeStep);
   rate.getOptions().enforceRate_ = true;
 
   timespec start{};
   timespec end{};
-  const double processingTime = 0.05;
+  const double processingTime = 0.005;
   std::vector<double> processingTimes;
   std::vector<double> summedStepTimes;
 
@@ -76,7 +75,7 @@ TEST(RateTest, SleepWithEnforceRate) {  // NOLINT
   rate.reset();
   rate.sleep();
   clock_gettime(CLOCK_MONOTONIC, &end);
-  EXPECT_NEAR(any_worker::Rate::GetDuration(start, end), timeStep, RATE_TEST_TOL);
+  EXPECT_NEAR_TEST_TOL(any_worker::Rate::GetDuration(start, end), timeStep);
 
   // Test sleep() with processing additionally.
   clock_gettime(CLOCK_MONOTONIC, &start);
@@ -84,66 +83,66 @@ TEST(RateTest, SleepWithEnforceRate) {  // NOLINT
   doSomething(processingTime);
   rate.sleep();
   clock_gettime(CLOCK_MONOTONIC, &end);
-  EXPECT_NEAR(any_worker::Rate::GetDuration(start, end), timeStep, RATE_TEST_TOL);
+  EXPECT_NEAR_TEST_TOL(any_worker::Rate::GetDuration(start, end), timeStep);
 
   // Test sleep() with where one step takes too long, recovery within one step.
-  processingTimes = {0.02, 0.02, 0.15, 0.02, 0.02};
-  summedStepTimes = {0.0, 0.1, 0.2, 0.35, 0.4, 0.5};
+  processingTimes = {0.002, 0.002, 0.015, 0.002, 0.002};
+  summedStepTimes = {0.0, 0.01, 0.02, 0.035, 0.04, 0.05};
   rate.reset();
   clock_gettime(CLOCK_MONOTONIC, &start);
   for (unsigned int i = 0; i < processingTimes.size(); i++) {
     clock_gettime(CLOCK_MONOTONIC, &end);
-    EXPECT_NEAR(any_worker::Rate::GetDuration(start, end), summedStepTimes[i], 2.0 * RATE_TEST_TOL);
+    EXPECT_NEAR_TEST_TOL(any_worker::Rate::GetDuration(start, end), summedStepTimes[i]);
     doSomething(processingTimes[i]);
     rate.sleep();
   }
   clock_gettime(CLOCK_MONOTONIC, &end);
-  EXPECT_NEAR(any_worker::Rate::GetDuration(start, end), summedStepTimes[processingTimes.size()], 2.0 * RATE_TEST_TOL);
+  EXPECT_NEAR_TEST_TOL(any_worker::Rate::GetDuration(start, end), summedStepTimes[processingTimes.size()]);
 
   // Test sleep() with where one step takes too long, recovery within two steps.
-  processingTimes = {0.02, 0.02, 0.19, 0.02, 0.02, 0.02};
-  summedStepTimes = {0.0, 0.1, 0.2, 0.39, 0.41, 0.5, 0.6};
+  processingTimes = {0.002, 0.002, 0.019, 0.002, 0.002, 0.002};
+  summedStepTimes = {0.00, 0.01, 0.02, 0.039, 0.041, 0.05, 0.06};
   rate.reset();
   clock_gettime(CLOCK_MONOTONIC, &start);
   for (unsigned int i = 0; i < processingTimes.size(); i++) {
     clock_gettime(CLOCK_MONOTONIC, &end);
-    EXPECT_NEAR(any_worker::Rate::GetDuration(start, end), summedStepTimes[i], 2.0 * RATE_TEST_TOL);
+    EXPECT_NEAR_TEST_TOL(any_worker::Rate::GetDuration(start, end), summedStepTimes[i]);
     doSomething(processingTimes[i]);
     rate.sleep();
   }
   clock_gettime(CLOCK_MONOTONIC, &end);
-  EXPECT_NEAR(any_worker::Rate::GetDuration(start, end), summedStepTimes[processingTimes.size()], 2.0 * RATE_TEST_TOL);
+  EXPECT_NEAR_TEST_TOL(any_worker::Rate::GetDuration(start, end), summedStepTimes[processingTimes.size()]);
 
   // Test sleep() with where two steps take too long, recovery within one step.
-  processingTimes = {0.02, 0.02, 0.12, 0.12, 0.02, 0.02};
-  summedStepTimes = {0.0, 0.1, 0.2, 0.32, 0.44, 0.5, 0.6};
+  processingTimes = {0.002, 0.002, 0.012, 0.012, 0.002, 0.002};
+  summedStepTimes = {0.00, 0.01, 0.02, 0.032, 0.044, 0.05, 0.06};
   rate.reset();
   clock_gettime(CLOCK_MONOTONIC, &start);
   for (unsigned int i = 0; i < processingTimes.size(); i++) {
     clock_gettime(CLOCK_MONOTONIC, &end);
-    EXPECT_NEAR(any_worker::Rate::GetDuration(start, end), summedStepTimes[i], 2.0 * RATE_TEST_TOL);
+    EXPECT_NEAR_TEST_TOL(any_worker::Rate::GetDuration(start, end), summedStepTimes[i]);
     doSomething(processingTimes[i]);
     rate.sleep();
   }
   clock_gettime(CLOCK_MONOTONIC, &end);
-  EXPECT_NEAR(any_worker::Rate::GetDuration(start, end), summedStepTimes[processingTimes.size()], 2.0 * RATE_TEST_TOL);
+  EXPECT_NEAR_TEST_TOL(any_worker::Rate::GetDuration(start, end), summedStepTimes[processingTimes.size()]);
 
   // Test sleep() with where two steps take too long, recovery within two steps.
-  processingTimes = {0.02, 0.02, 0.12, 0.12, 0.08, 0.02, 0.02};
-  summedStepTimes = {0.0, 0.1, 0.2, 0.32, 0.44, 0.52, 0.6, 0.7};
+  processingTimes = {0.002, 0.002, 0.012, 0.012, 0.008, 0.002, 0.002};
+  summedStepTimes = {0.00, 0.01, 0.02, 0.032, 0.044, 0.052, 0.06, 0.07};
   rate.reset();
   clock_gettime(CLOCK_MONOTONIC, &start);
   for (unsigned int i = 0; i < processingTimes.size(); i++) {
     clock_gettime(CLOCK_MONOTONIC, &end);
-    EXPECT_NEAR(any_worker::Rate::GetDuration(start, end), summedStepTimes[i], 2.0 * RATE_TEST_TOL);
+    EXPECT_NEAR_TEST_TOL(any_worker::Rate::GetDuration(start, end), summedStepTimes[i]);
     doSomething(processingTimes[i]);
     rate.sleep();
   }
   clock_gettime(CLOCK_MONOTONIC, &end);
-  EXPECT_NEAR(any_worker::Rate::GetDuration(start, end), summedStepTimes[processingTimes.size()], 2.0 * RATE_TEST_TOL);
+  EXPECT_NEAR_TEST_TOL(any_worker::Rate::GetDuration(start, end), summedStepTimes[processingTimes.size()]);
 }
 
-TEST(RateTest, SleepWithoutEnforceRate) {  // NOLINT
+TEST(RateTest, DISABLED_SleepWithoutEnforceRate) {  // NOLINT
   const double timeStep = 0.1;
   any_worker::Rate rate("Test", timeStep);
   rate.getOptions().enforceRate_ = false;
@@ -159,7 +158,7 @@ TEST(RateTest, SleepWithoutEnforceRate) {  // NOLINT
   rate.reset();
   rate.sleep();
   clock_gettime(CLOCK_MONOTONIC, &end);
-  EXPECT_NEAR(any_worker::Rate::GetDuration(start, end), timeStep, RATE_TEST_TOL);
+  EXPECT_NEAR_TEST_TOL(any_worker::Rate::GetDuration(start, end), timeStep);
 
   // Test sleep() with processing.
   clock_gettime(CLOCK_MONOTONIC, &start);
@@ -167,7 +166,7 @@ TEST(RateTest, SleepWithoutEnforceRate) {  // NOLINT
   doSomething(processingTime);
   rate.sleep();
   clock_gettime(CLOCK_MONOTONIC, &end);
-  EXPECT_NEAR(any_worker::Rate::GetDuration(start, end), timeStep, RATE_TEST_TOL);
+  EXPECT_NEAR_TEST_TOL(any_worker::Rate::GetDuration(start, end), timeStep);
 
   // Test sleep() with where one step takes too long.
   processingTimes = {0.02, 0.02, 0.15, 0.02, 0.02};
@@ -176,12 +175,12 @@ TEST(RateTest, SleepWithoutEnforceRate) {  // NOLINT
   clock_gettime(CLOCK_MONOTONIC, &start);
   for (unsigned int i = 0; i < processingTimes.size(); i++) {
     clock_gettime(CLOCK_MONOTONIC, &end);
-    EXPECT_NEAR(any_worker::Rate::GetDuration(start, end), summedStepTimes[i], 2.0 * RATE_TEST_TOL);
+    EXPECT_NEAR_TEST_TOL(any_worker::Rate::GetDuration(start, end), summedStepTimes[i]);
     doSomething(processingTimes[i]);
     rate.sleep();
   }
   clock_gettime(CLOCK_MONOTONIC, &end);
-  EXPECT_NEAR(any_worker::Rate::GetDuration(start, end), summedStepTimes[processingTimes.size()], 2.0 * RATE_TEST_TOL);
+  EXPECT_NEAR_TEST_TOL(any_worker::Rate::GetDuration(start, end), summedStepTimes[processingTimes.size()]);
 
   // Test sleep() with where two steps take too long.
   processingTimes = {0.02, 0.02, 0.12, 0.12, 0.02, 0.02};
@@ -190,12 +189,12 @@ TEST(RateTest, SleepWithoutEnforceRate) {  // NOLINT
   clock_gettime(CLOCK_MONOTONIC, &start);
   for (unsigned int i = 0; i < processingTimes.size(); i++) {
     clock_gettime(CLOCK_MONOTONIC, &end);
-    EXPECT_NEAR(any_worker::Rate::GetDuration(start, end), summedStepTimes[i], 4.0 * RATE_TEST_TOL);
+    EXPECT_NEAR_TEST_TOL(any_worker::Rate::GetDuration(start, end), summedStepTimes[i]);
     doSomething(processingTimes[i]);
     rate.sleep();
   }
   clock_gettime(CLOCK_MONOTONIC, &end);
-  EXPECT_NEAR(any_worker::Rate::GetDuration(start, end), summedStepTimes[processingTimes.size()], 4.0 * RATE_TEST_TOL);
+  EXPECT_NEAR_TEST_TOL(any_worker::Rate::GetDuration(start, end), summedStepTimes[processingTimes.size()]);
 }
 
 TEST(RateTest, WarningsAndErrors) {  // NOLINT
@@ -215,7 +214,7 @@ TEST(RateTest, WarningsAndErrors) {  // NOLINT
   EXPECT_EQ(rate.getNumErrors(), 1u);
 }
 
-TEST(RateTest, StatisticsWithEnforceRate) {  // NOLINT
+TEST(RateTest, DISABLED_StatisticsWithEnforceRate) {  // NOLINT
   const double timeStep = 0.1;
   any_worker::Rate rate("Test", timeStep);
   rate.getOptions().enforceRate_ = true;
@@ -227,8 +226,8 @@ TEST(RateTest, StatisticsWithEnforceRate) {  // NOLINT
   rate.sleep();
 
   EXPECT_EQ(rate.getNumTimeSteps(), 1u);
-  EXPECT_NEAR(rate.getAwakeTime(), processingTime, 2.0 * RATE_TEST_TOL);
-  EXPECT_NEAR(rate.getAwakeTimeMean(), processingTime, RATE_TEST_TOL);
+  EXPECT_NEAR_TEST_TOL(rate.getAwakeTime(), processingTime);
+  EXPECT_NEAR_TEST_TOL(rate.getAwakeTimeMean(), processingTime);
   EXPECT_TRUE(std::isnan(rate.getAwakeTimeStdDev()));
 
   // Test 10 time steps with similar processing times.
@@ -240,8 +239,8 @@ TEST(RateTest, StatisticsWithEnforceRate) {  // NOLINT
   }
 
   EXPECT_EQ(rate.getNumTimeSteps(), numTimeSteps);
-  EXPECT_NEAR(rate.getAwakeTime(), processingTime, 2.0 * RATE_TEST_TOL);
-  EXPECT_NEAR(rate.getAwakeTimeMean(), processingTime, RATE_TEST_TOL);
+  EXPECT_NEAR_TEST_TOL(rate.getAwakeTime(), processingTime);
+  EXPECT_NEAR_TEST_TOL(rate.getAwakeTimeMean(), processingTime);
   EXPECT_LE(rate.getAwakeTimeStdDev(), RATE_TEST_TOL);
   EXPECT_FALSE(rate.getAwakeTimeStdDev() == 0.0);  // If it is 0.0 something is fishy.
 
@@ -254,9 +253,9 @@ TEST(RateTest, StatisticsWithEnforceRate) {  // NOLINT
   }
 
   EXPECT_EQ(rate.getNumTimeSteps(), processingTimes.size());
-  EXPECT_NEAR(rate.getAwakeTime(), *processingTimes.rbegin(), 2.0 * RATE_TEST_TOL);
-  EXPECT_NEAR(rate.getAwakeTimeMean(), 0.05, RATE_TEST_TOL);
-  EXPECT_NEAR(rate.getAwakeTimeStdDev(), 0.02, RATE_TEST_TOL);
+  EXPECT_NEAR_TEST_TOL(rate.getAwakeTime(), *processingTimes.rbegin());
+  EXPECT_NEAR_TEST_TOL(rate.getAwakeTimeMean(), 0.05);
+  EXPECT_NEAR_TEST_TOL(rate.getAwakeTimeStdDev(), 0.02);
 
   // Test again with time step violation.
   rate.getOptions().timeStep_ = 0.035;
@@ -267,12 +266,12 @@ TEST(RateTest, StatisticsWithEnforceRate) {  // NOLINT
   }
 
   EXPECT_EQ(rate.getNumTimeSteps(), processingTimes.size());
-  EXPECT_NEAR(rate.getAwakeTime(), *processingTimes.rbegin(), 2.0 * RATE_TEST_TOL);
-  EXPECT_NEAR(rate.getAwakeTimeMean(), 0.05, RATE_TEST_TOL);
-  EXPECT_NEAR(rate.getAwakeTimeStdDev(), 0.02, RATE_TEST_TOL);
+  EXPECT_NEAR_TEST_TOL(rate.getAwakeTime(), *processingTimes.rbegin());
+  EXPECT_NEAR_TEST_TOL(rate.getAwakeTimeMean(), 0.05);
+  EXPECT_NEAR_TEST_TOL(rate.getAwakeTimeStdDev(), 0.02);
 }
 
-TEST(RateTest, StatisticsWithoutEnforceRate) {  // NOLINT
+TEST(RateTest, DISABLED_StatisticsWithoutEnforceRate) {  // NOLINT
   const double timeStep = 0.1;
   any_worker::Rate rate("Test", timeStep);
   rate.getOptions().enforceRate_ = false;
@@ -284,8 +283,8 @@ TEST(RateTest, StatisticsWithoutEnforceRate) {  // NOLINT
   rate.sleep();
 
   EXPECT_EQ(rate.getNumTimeSteps(), 1u);
-  EXPECT_NEAR(rate.getAwakeTime(), processingTime, 2.0 * RATE_TEST_TOL);
-  EXPECT_NEAR(rate.getAwakeTimeMean(), processingTime, RATE_TEST_TOL);
+  EXPECT_NEAR_TEST_TOL(rate.getAwakeTime(), processingTime);
+  EXPECT_NEAR_TEST_TOL(rate.getAwakeTimeMean(), processingTime);
   EXPECT_TRUE(std::isnan(rate.getAwakeTimeStdDev()));
 
   // Test 10 time steps with similar processing times.
@@ -297,8 +296,8 @@ TEST(RateTest, StatisticsWithoutEnforceRate) {  // NOLINT
   }
 
   EXPECT_EQ(rate.getNumTimeSteps(), numTimeSteps);
-  EXPECT_NEAR(rate.getAwakeTime(), processingTime, 2.0 * RATE_TEST_TOL);
-  EXPECT_NEAR(rate.getAwakeTimeMean(), processingTime, RATE_TEST_TOL);
+  EXPECT_NEAR_TEST_TOL(rate.getAwakeTime(), processingTime);
+  EXPECT_NEAR_TEST_TOL(rate.getAwakeTimeMean(), processingTime);
   EXPECT_LE(rate.getAwakeTimeStdDev(), RATE_TEST_TOL);
   EXPECT_FALSE(rate.getAwakeTimeStdDev() == 0.0);  // If it is 0.0 something is fishy.
 
@@ -311,9 +310,9 @@ TEST(RateTest, StatisticsWithoutEnforceRate) {  // NOLINT
   }
 
   EXPECT_EQ(rate.getNumTimeSteps(), processingTimes.size());
-  EXPECT_NEAR(rate.getAwakeTime(), *processingTimes.rbegin(), 2.0 * RATE_TEST_TOL);
-  EXPECT_NEAR(rate.getAwakeTimeMean(), 0.05, RATE_TEST_TOL);
-  EXPECT_NEAR(rate.getAwakeTimeStdDev(), 0.02, RATE_TEST_TOL);
+  EXPECT_NEAR_TEST_TOL(rate.getAwakeTime(), *processingTimes.rbegin());
+  EXPECT_NEAR_TEST_TOL(rate.getAwakeTimeMean(), 0.05);
+  EXPECT_NEAR_TEST_TOL(rate.getAwakeTimeStdDev(), 0.02);
 
   // Test again with time step violation.
   rate.getOptions().timeStep_ = 0.035;
@@ -324,7 +323,7 @@ TEST(RateTest, StatisticsWithoutEnforceRate) {  // NOLINT
   }
 
   EXPECT_EQ(rate.getNumTimeSteps(), processingTimes.size());
-  EXPECT_NEAR(rate.getAwakeTime(), *processingTimes.rbegin(), 2.0 * RATE_TEST_TOL);
-  EXPECT_NEAR(rate.getAwakeTimeMean(), 0.05, RATE_TEST_TOL);
-  EXPECT_NEAR(rate.getAwakeTimeStdDev(), 0.02, RATE_TEST_TOL);
+  EXPECT_NEAR_TEST_TOL(rate.getAwakeTime(), *processingTimes.rbegin());
+  EXPECT_NEAR_TEST_TOL(rate.getAwakeTimeMean(), 0.05);
+  EXPECT_NEAR_TEST_TOL(rate.getAwakeTimeStdDev(), 0.02);
 }
