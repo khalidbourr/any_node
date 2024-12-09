@@ -1,6 +1,15 @@
 cmake_minimum_required(VERSION 3.5.1)
 project(any_node_example)
 
+list(APPEND CMAKE_PREFIX_PATH 
+  "/opt/ros/melodic"
+  "/root/catkin_ws/devel_isolated/any_node"
+  "/root/catkin_ws/devel_isolated/std_msgs"
+)
+
+# You might also need to add the module path
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "/opt/ros/melodic/share/catkin/cmake")
+
 find_package(catkin REQUIRED
   COMPONENTS
     any_node

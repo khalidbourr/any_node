@@ -1,6 +1,17 @@
 cmake_minimum_required(VERSION 3.5.1)
 project(any_node)
 
+
+list(APPEND CMAKE_PREFIX_PATH 
+  "/root/catkin_ws/devel_isolated/any_worker"
+  "/root/catkin_ws/devel_isolated/message_logger"
+  "/root/catkin_ws/devel_isolated/param_io"
+  "/root/catkin_ws/devel_isolated/signal_handler"
+)
+
+
+
+
 find_package(catkin REQUIRED
   COMPONENTS
     any_worker
